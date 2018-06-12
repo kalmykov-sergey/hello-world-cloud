@@ -1,0 +1,29 @@
+buildscript {
+    ext {
+        springVersion = '5.0.6.RELEASE'
+    }
+    repositories {
+        mavenCentral()
+    }
+}
+
+apply plugin: 'java'
+apply plugin: 'eclipse'
+
+
+group = 'me.kalmykovsa'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+    maven { url "https://repo.spring.io/milestone" }
+}
+
+
+dependencies {
+    compile("org.springframework:spring-context-support:$springVersion")
+    compile("org.springframework:spring-web:$springVersion")
+    compile("org.springframework:spring-webmvc:$springVersion")
+    compile('org.eclipse.jetty:jetty-webapp:9.0.6.v20130930')
+}
