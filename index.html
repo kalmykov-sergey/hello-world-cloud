@@ -1,0 +1,472 @@
+
+<!doctype html>
+<!--[if lt IE 7]><html class="no-js lt-ie9 lt-ie8 lt-ie7" lang="en"> <![endif]-->
+<!--[if (IE 7)&!(IEMobile)]><html class="no-js lt-ie9 lt-ie8" lang="en"><![endif]-->
+<!--[if (IE 8)&!(IEMobile)]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en"><!--<![endif]-->
+<head>
+<meta charset="utf-8">
+<title>Low-risk Monolith to Microservice Evolution Part I &#8211; Software Blog</title>
+<meta name="description" content="As part of a two-day microservices workshop I’m putting together, I’ve been thinking a lot about how to explain monolith-application decomposition and what a transition to microservices might look like. This is a small subset of that material, but I want to share with you to get feedback (in the workshop we go into more detail about whether you should even break up your monolith!). This is based on my own tried and true real-life experience as well as my work with the many Red Hat customers I’ve met over North America for the last few years. Part I explores the architecture while the second part (to be released shortly) will cover some technology that can greatly help in this area. Follow along (@christianposta) on twitter or http://blog.christianposta.com for the latest updates and discussion.
+
+">
+<meta name="keywords" content="microservices, network, distributed systems, circuit breaker, tracing, security">
+
+
+<!-- Twitter Cards -->
+<meta name="twitter:title" content="Low-risk Monolith to Microservice Evolution Part I">
+<meta name="twitter:description" content="As part of a two-day microservices workshop I’m putting together, I’ve been thinking a lot about how to explain monolith-application decomposition and what a transition to microservices might look like. This is a small subset of that material, but I want to share with you to get feedback (in the workshop we go into more detail about whether you should even break up your monolith!). This is based on my own tried and true real-life experience as well as my work with the many Red Hat customers I’ve met over North America for the last few years. Part I explores the architecture while the second part (to be released shortly) will cover some technology that can greatly help in this area. Follow along (@christianposta) on twitter or http://blog.christianposta.com for the latest updates and discussion.
+
+">
+<meta name="twitter:site" content="@christianposta">
+<meta name="twitter:creator" content="@christianposta">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://blog.christianposta.com/images/default-thumb.png">
+
+<!-- Open Graph -->
+<meta property="og:locale" content="en_US">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Low-risk Monolith to Microservice Evolution Part I">
+<meta property="og:description" content="As part of a two-day microservices workshop I’m putting together, I’ve been thinking a lot about how to explain monolith-application decomposition and what a transition to microservices might look like. This is a small subset of that material, but I want to share with you to get feedback (in the workshop we go into more detail about whether you should even break up your monolith!). This is based on my own tried and true real-life experience as well as my work with the many Red Hat customers I’ve met over North America for the last few years. Part I explores the architecture while the second part (to be released shortly) will cover some technology that can greatly help in this area. Follow along (@christianposta) on twitter or http://blog.christianposta.com for the latest updates and discussion.
+
+">
+<meta property="og:url" content="http://blog.christianposta.com/microservices/low-risk-monolith-to-microservice-evolution/">
+<meta property="og:site_name" content="Software Blog">
+
+
+
+
+
+<link rel="canonical" href="http://blog.christianposta.com/microservices/low-risk-monolith-to-microservice-evolution/">
+<link href="http://blog.christianposta.com/feed.xml" type="application/atom+xml" rel="alternate" title="Software Blog Feed">
+
+<!-- http://t.co/dKP3o1e -->
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="http://blog.christianposta.com/assets/css/main.css">
+
+<meta http-equiv="cleartype" content="on">
+
+<!-- HTML5 Shiv and Media Query Support -->
+<!--[if lt IE 9]>
+	<script src="http://blog.christianposta.com/assets/js/vendor/html5shiv.min.js"></script>
+	<script src="http://blog.christianposta.com/assets/js/vendor/respond.min.js"></script>
+<![endif]-->
+
+<!-- Modernizr -->
+<script src="http://blog.christianposta.com/assets/js/vendor/modernizr-2.7.1.custom.min.js"></script>
+
+<link href='//fonts.googleapis.com/css?family=PT+Sans+Narrow:400,700%7CPT+Serif:400,700,400italic' rel='stylesheet' type='text/css'>
+
+<!-- Icons -->
+<!-- 16x16 -->
+<link rel="shortcut icon" href="http://blog.christianposta.com/favicon.ico">
+<!-- 32x32 -->
+<link rel="shortcut icon" href="http://blog.christianposta.com/favicon.png">
+<!-- 57x57 (precomposed) for iPhone 3GS, pre-2011 iPod Touch and older Android devices -->
+<link rel="apple-touch-icon-precomposed" href="http://blog.christianposta.com/images/apple-touch-icon-precomposed.png">
+<!-- 72x72 (precomposed) for 1st generation iPad, iPad 2 and iPad mini -->
+<link rel="apple-touch-icon-precomposed" sizes="72x72" href="http://blog.christianposta.com/images/apple-touch-icon-72x72-precomposed.png">
+<!-- 114x114 (precomposed) for iPhone 4, 4S, 5 and post-2011 iPod Touch -->
+<link rel="apple-touch-icon-precomposed" sizes="114x114" href="http://blog.christianposta.com/images/apple-touch-icon-114x114-precomposed.png">
+<!-- 144x144 (precomposed) for iPad 3rd and 4th generation -->
+<link rel="apple-touch-icon-precomposed" sizes="144x144" href="http://blog.christianposta.com/images/apple-touch-icon-144x144-precomposed.png">
+
+</head>
+
+<body class="post">
+
+<!--[if lt IE 9]><div class="browser-upgrade alert alert-info">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</div><![endif]-->
+
+<div class="navigation-wrapper">
+	<div class="site-name">
+		<a href="http://blog.christianposta.com/">Software Blog</a>
+	</div><!-- /.site-name -->
+	<div class="top-navigation">
+		<nav role="navigation" id="site-nav" class="nav">
+		    <ul>
+		        
+				    
+				    <li><a href="http://blog.christianposta.com/about/" >About</a></li>
+				
+				    
+				    <li><a href="http://blog.christianposta.com/posts/" >All Posts</a></li>
+				
+				    
+				    <li><a href="http://slideshare.net/ceposta" target="_blank">Presentations</a></li>
+				
+				    
+				    <li><a href="http://blog.christianposta.com/tags/" >Tags</a></li>
+				
+		    </ul>
+		</nav>
+	</div><!-- /.top-navigation -->
+</div><!-- /.navigation-wrapper -->
+
+
+
+<div id="main" role="main">
+  <div class="article-author-side">
+    
+
+<div itemscope itemtype="http://schema.org/Person">
+
+
+	<img src="http://blog.christianposta.com/images/bio-photo.jpg" class="bio-photo" alt="Christian Posta bio photo">
+
+
+  <h3 itemprop="name">Christian Posta</h3>
+  <p>Chief Architect, cloud application development @ Red Hat, author Microservices for Java Developers, open-source enthusiast, committer @ Apache, Cloud, Integration, Kubernetes, Docker, OpenShift, Fabric8, #blogger</p>
+  
+  <a href="http://twitter.com/christianposta" class="author-social" target="_blank"><i class="fa fa-fw fa-twitter-square"></i> Twitter</a>
+  
+  <a href="http://plus.google.com/+christianposta" class="author-social" target="_blank"><i class="fa fa-fw fa-google-plus-square"></i> Google+</a>
+  <a href="http://linkedin.com/pub/christian-posta/15/412/199" class="author-social" target="_blank"><i class="fa fa-fw fa-linkedin-square"></i> LinkedIn</a>
+  
+  
+  <a href="http://github.com/christian-posta" class="author-social" target="_blank"><i class="fa fa-fw fa-github"></i> Github</a>
+  <a href="http://stackoverflow.com/users/248392/ceposta" class="author-social" target="_blank"><i class="fa fa-fw fa-stack-overflow"></i> Stackoverflow</a>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</div>
+  </div>
+  <article class="post">
+    <div class="headline-wrap">
+      
+        <h1><a href="http://blog.christianposta.com/microservices/low-risk-monolith-to-microservice-evolution/" rel="bookmark" title="Low-risk Monolith to Microservice Evolution Part I">Low-risk Monolith to Microservice Evolution Part I</a></h1>
+      
+    </div><!--/ .headline-wrap -->
+    <div class="article-wrap">
+      <p>As part of a two-day microservices workshop I’m putting together, I’ve been thinking a lot about how to explain monolith-application decomposition and what a transition to microservices might look like. This is a small subset of that material, but I want to share with you to get feedback (in the workshop we go into more detail about whether you should even break up your monolith!). This is based on my own tried and true real-life experience as well as my work with the many Red Hat customers I’ve met over North America for the last few years. Part I explores the architecture while the second part (to be released shortly) will cover some technology that can greatly help in this area. Follow along (<a href="http://www.twitter.com/christianposta">@christianposta</a>) on twitter or <a href="http://blog.christianposta.com">http://blog.christianposta.com</a> for the latest updates and discussion.</p>
+
+<p>You can find <a href="http://blog.christianposta.com/microservices/low-risk-monolith-to-microservice-evolution-part-ii/">Part II</a> and <a href="http://blog.christianposta.com/microservices/low-risk-monolith-to-microservice-evolution-part-iii/">Part III</a>.</p>
+
+<p>Before we dig in, let’s set up some assumptions.</p>
+
+<ul>
+  <li>Microservices architecture is not appropriate all the time (to be discussed in length)</li>
+  <li>If we find we should go to a microservices architecture, we have to decide what happens with the monolith</li>
+  <li>In rare cases, we’ll want to break out parts of the monolith as is; in most other cases we’ll want to either build new features or re-implement existing business processes around the monolith (in a strangler fashion)</li>
+  <li>In the cases where we need to break out functionality or re-implement, we cannot ignore the fact the monolith is currently in production taking load and probably bringing lots of business value</li>
+  <li>We need a way to attack this problem with very little disruption to the overall business value of the system</li>
+  <li>Since the monolith is the monolith, it will be very difficult / nearly impossible to make changes to the data model / database underneath it</li>
+  <li>The approach we take should reduce the risk of the evolution and may take multiple deployments and releases to make it all happen</li>
+</ul>
+
+<h2 id="extracting-microservices">Extracting Microservices</h2>
+
+<p>If you dig into the conference/blog posts this topic, often times you’ll find it offers these words of advice:</p>
+
+<ul>
+  <li>organize around nouns</li>
+  <li>do one thing and one thing well</li>
+  <li>single responsibility principle</li>
+  <li>it’s hard</li>
+</ul>
+
+<p>I’m afraid this advice is quite useless.</p>
+
+<p>The more useful material discusses an approach that at times look something like this:</p>
+
+<ul>
+  <li>Identify modules (either existing or new ones to write)</li>
+  <li>Break out tables that correspond to those modules and wrap with a service</li>
+  <li>Update the code that once relied on the DB tables directly to call this new service</li>
+  <li>Rinse and repeat</li>
+</ul>
+
+<p>Let’s take a closer look:</p>
+
+<h3 id="step-1-identify-modules">Step 1: Identify modules</h3>
+<p><img src="/images/decomp/decomp000.png" alt="monolith with modules" /></p>
+
+<p>You start off with some nasty monolith. In the image above I’ve simplified this to denote the different modules and database tables that may be involved here. We identify which modules we wish to break out of the monolith and figure out which tables are involved and then go from there. Of course, the reality is monoliths are far more entangled with modules conflated with each other (if any modules). More on that in a bit.</p>
+
+<h3 id="step-2-break-out-database-tables-wrap-with-service-update-dependencies">Step 2: Break out database tables, wrap with service, update dependencies</h3>
+
+<p><img src="/images/decomp/decomp001.png" alt="break out foo service" /></p>
+
+<p>The next step is to identify which tables are used by the <code class="highlighter-rouge">Foo</code> module and break those out into its own service. This service is now the only thing that can access those Foo tables. No more sharing tables! This is a good thing. And anything that once did refer to <code class="highlighter-rouge">Foo</code> must now go through the API of the newly created service. In the above image, we update the <code class="highlighter-rouge">Bar</code> and <code class="highlighter-rouge">Cheese</code> service to now refer to <code class="highlighter-rouge">Foo</code> service whenever it needs <code class="highlighter-rouge">Foo</code> things.</p>
+
+<h3 id="step-3-rinse-and-repeat">Step 3: Rinse and repeat</h3>
+
+<p><img src="/images/decomp/decomp002.png" alt="" /></p>
+
+<p>The last step is to repeat this effort until you’re left with no more monolith. In the above image, we’ve done the same thing for the <code class="highlighter-rouge">Bar</code> service and you can see that we’re moving to an architecture where services own their data and expose APIs – sounding similar to what we hear about microservices.</p>
+
+<p>While this approach is generally a decent set of guidelines, <strong>it misses a lot of the fidelity that we really need when going down this path</strong>. For example, this approach glosses over the fact that we cannot just stop the world to remove tables from databases. Also:</p>
+
+<ul>
+  <li>rarely do monoliths lend themselves to nice and neat modularization</li>
+  <li>the relationships between tables can be highly normalized and exhibit tight coupling/integrity constraints among entities</li>
+  <li>We may not fully understand what code in the monolith uses which tables</li>
+  <li>just because we’ve extracted tables to a new service doesn’t mean the existing business processes stop so we can migrate everyone to use the service</li>
+  <li>there will be some ugly migration steps that cannot just be wished away</li>
+  <li>there is probably a point of diminishing returns where it doesn’t make sense to break things out of the monolith</li>
+</ul>
+
+<p>– etc, etc.</p>
+
+<p>Let’s take a look at a concrete example and what the approach/pattern would look like and the options we may have as we go.</p>
+
+<h2 id="concrete-example">Concrete example</h2>
+
+<p>This example comes from the aforementioned workshop. I’ll be adding some color around the splitting of the services, but there are more detailed guidelines around Domain Driven Design, coupling models, and physical/logical architecture that we go into for the workshop that we’ll leave out for now. This approach on the surface appears to deal with decomposition of existing monolith functionality but applies equally well to adding new functionality around the monolith;  this may be the more likely case since making changes to the monolith can be quite risky.</p>
+
+<h3 id="meet-the-monolith">Meet the monolith</h3>
+
+<p><img src="/images/decomp/decomp00.png" alt="Monolith" /></p>
+
+<p>This is the <code class="highlighter-rouge">Monolith</code> that we’ll be exploring. It’s based on the <a href="https://developers.redhat.com/ticket-monster/">TicketMonster</a> tutorial from <a href="http://developers.redhat.com">developers.redhat.com</a>. That tutorial explores building a typical Java EE application and ends up being a good example: it’s not too overly complicated but has enough meat to it we can use it to illustrate key points. In part two of this blog post we’ll actually go deeper into the technology frameworks/platforms.</p>
+
+<p>From this image, we’re illustrating that the <code class="highlighter-rouge">Monolith</code> has all modules/components/UI co-deployed talking to a single monlithic database. Whenever we need to make a change, we need to deploy all of it. You can imagine for a moment that the application is 10+ yrs old and is now very difficult to change (for all the technical reasons but also team/organization structure reasons).  We would like to break out the UI and key services that will allow the business to make changes faster and independently from each other  to experiment with delivering new customer/and/or/business value.</p>
+
+<h4 id="considerations">Considerations</h4>
+
+<ul>
+  <li>Monolith (code and database schema) is hard to change</li>
+  <li>Changes require complete re-deployment and high coordination between teams</li>
+  <li>We need to have lots of tests in place to catch regressions</li>
+  <li>We need a fully automated way to deploy</li>
+</ul>
+
+<h3 id="extract-the-ui">Extract the UI</h3>
+<p><img src="/images/decomp/decomp01.png" alt="extract UI" /></p>
+
+<p>In this step, we’re going to decouple the <code class="highlighter-rouge">UI</code> from the <code class="highlighter-rouge">Monolith</code>. Actually in this architecture, we don’t actually remove anything from the <code class="highlighter-rouge">Monolith</code>. We start to reduce risk by just adding a new deployment which contains the UI. The new UI component in this architecture should be very close to the same UI (exactly?) that’s in the <code class="highlighter-rouge">Monolith</code> and just calls back to the <code class="highlighter-rouge">Monolith</code>’s REST API… of course this implies the monolith has a reasonable API that an external UI could use. We may very well find that this is not the case: typically this type of API may resemble more of an “internal” API at which point we’d need to think about some integration between the separate UI component and the backend monolith and what a more consumable public-facing API might look like.</p>
+
+<p>We can deploy this new <code class="highlighter-rouge">UI</code> component into our architecture and use our platform to slowly route traffic to it while still routing to the old monolith. This way we can introduce it without taking downtime. Again, in the second part of the blog post we’ll see how to do this in more detail; however the concept of <a href="http://blog.christianposta.com/deploy/blue-green-deployments-a-b-testing-and-canary-releases/">dark launch/canary release/rolling release</a> are all very important here (and for subsequent steps).</p>
+
+<h4 id="considerations-1">Considerations</h4>
+
+<ul>
+  <li>Don’t modify the monolith for this first step; just copy/past UI into separate component</li>
+  <li>We need to have a reasonable remoting API between the UI and monolith – this may not always be the case</li>
+  <li>Security surface increases</li>
+  <li>We need a way to route/split traffic in a controlled manner to the new UI and/or the monolith directly to support <a href="http://blog.christianposta.com/deploy/blue-green-deployments-a-b-testing-and-canary-releases/">dark launch/canary/rolling release</a></li>
+</ul>
+
+<h3 id="drop-the-ui-from-the-monolith">Drop the UI from the monolith</h3>
+
+<p><img src="/images/decomp/decomp02.png" alt="drop UI" /></p>
+
+<p>In the previous step, we introduced a <code class="highlighter-rouge">UI</code> and slowly rolled over traffic to the new <code class="highlighter-rouge">UI</code> (which communicated directly with the <code class="highlighter-rouge">Monolith</code>). In this step we do a similar deployment strategy, except now we slowly release a new deployment of the monolith with the UI removed. We can slowly bleed traffic over and slop/rollback if we see issues. Once we have all traffic going to our Monolith without the UI (termed <code class="highlighter-rouge">Backend</code> from here on) we can remove the <code class="highlighter-rouge">Monolith</code> deployment completely. By separating out the UI, we’ve now made a small decomposition to our monolith and reduced our risk by relying on dark launches/canaries/rolling releases.</p>
+
+<h4 id="considerations-2">Considerations</h4>
+
+<ul>
+  <li>We are removing the UI component from the monolith</li>
+  <li>This requires (hopefully) minimal changes to the monolith (deprecating/removing/disabling the UI)</li>
+  <li>Again we use a controlled routing/shaping approach to introduce this change without downtime</li>
+</ul>
+
+<h3 id="introduce-a-new-service">Introduce a new service</h3>
+
+<p><img src="/images/decomp/decomp03.png" alt="" /></p>
+
+<p>In the next step, and skipping the detail of coupling, Domain Driven Design, etc. we’re introducing a new service: the <code class="highlighter-rouge">Orders</code> service. This is a critical service that the business wants to change more frequently than the rest of the application and has a fairly complicated write model. We may also explore architectural patterns like CQRS with this model, but I digress.</p>
+
+<p>We want to focus on the boundary and API of the <code class="highlighter-rouge">Orders</code> service in terms of the existing implementation in the <code class="highlighter-rouge">Backend</code>. In reality, this implementation is more likely to be a re-write than a port of existing code, but the idea/approach here is the same either way. Notice in this architecture, the <code class="highlighter-rouge">Orders</code> service has its own database. This is good; we’re shooting for a complete decoupling – however we’re not there yet. There are a few more steps we need to consider/undertake.</p>
+
+<p>This step would also be a good time to consider how this service plays in the overall service architecture by focusing on the <em>Events</em> it may emit or consume. Now is a great time to do an activity like Event Storming <a href="http://ziobrando.blogspot.com/2013/11/introducing-event-storming.html"></a> and think through the events we should publish as we start to take transactional workloads. These events will come in handy when we try to integrate with other systems and even as we evolve the monolith.</p>
+
+<ul>
+  <li>We want to focus on the API design / boundary of our extracted service</li>
+  <li>This may be a re-write from what exists in the monolith</li>
+  <li>Once we have the API decided, we will implement a simple scaffolding/place holder for the service</li>
+  <li>The new Orders service will have its own database</li>
+  <li>The new Orders service <strong>WILL NOT</strong> be taking any kind of traffic at this point</li>
+</ul>
+
+<h3 id="connect-the-api-with-an-implementation">Connect the API with an implementation</h3>
+
+<p><img src="/images/decomp/decomp04.png" alt="" /></p>
+
+<p>At this point we should be continuing to evolve the service’s API and domain model and how it’s implemented in code. This service will store any new transactional workloads into its own database and keep it separate from any other services. Services needing access to this data would have to go through an API.</p>
+
+<p>One thing we will not be able to ignore: our new service and its data is intimately related (if not exactly the same in some areas) to the data in the monolith. This is highly inconvenient, actually. As we start to build the new service, we’ll need existing data from the <code class="highlighter-rouge">Backend</code> service’s database. This could get really tricky because of the normalization/FK constraints/relationships in the data model. Re-using an existing API on the monolith/backend may be too coarse grained and we’d have to re-invent a lot of gymnastics to get the data in the shape we want.</p>
+
+<p>What we want to do is get access to the data from the <code class="highlighter-rouge">Backend</code> in read-only mode through a lower-level API and have a way to shape the data/data-model into the model that fits better with the domain model in our new service. In this architecture, we’re going to temporarily connect up to the <code class="highlighter-rouge">Backend</code> database directly and query the data directly as we need. For this step, we do need a consistency model that reflects a direct database access.</p>
+
+<p>Some of you may cringe initially at this approach. And you should. However, the plain fact is this approach is totally valid and has been used successfully in highly critical systems – and more importantly – is not the end-state architecture (if you think this may end up being end-state architecture, JUST STOP and DO NOT DO THIS). You may also point out that connecting up to the <code class="highlighter-rouge">Backend</code> database, querying data, and massaging into the right shape we need for our new service’s domain model involves a lot of nasty integration/boiler plate. I’d argue since this is temporary in our evolution of the monolith, it’s probably okay: ie, use technical debt to your advantage and then quickly pay it down. However, there is a better way. I’ll discuss this in part 2 of this blog post.</p>
+
+<p>Alternatively, some of you might be saying “well, just stand up a REST API in front of the <code class="highlighter-rouge">Backend</code> database that gives lower-level data access and have the new service call that”. This is also a viable approach but not without its own drawbacks. Again, will discuss this in more detail in part 2.</p>
+
+<h4 id="considerations-3">Considerations</h4>
+
+<ul>
+  <li>The extracted/new service has a data model that has tight coupling with the monolith’s data model by definition</li>
+  <li>The monolith most likely does not provide an API at the right level to get this data</li>
+  <li>Shaping the data even if we do get it requires lots of boiler plate code</li>
+  <li>We can connect directly to the backend database temporarily for read-only queries</li>
+  <li>The monolith rarely (if ever) changes its database</li>
+</ul>
+
+<h3 id="start-sending-shadow-traffic-to-the-new-service-dark-launch">Start sending shadow traffic to the new service (dark launch)</h3>
+
+<p><img src="/images/decomp/decomp05.png" alt="" /></p>
+
+<p>In our next step of this approach/pattern, we need a way to actually direct traffic to our new service. The key thing here, however, is we don’t want to do a big-bang release. We don’t want to just throw this into our production traffic (especially considering that this example uses an “order” service which takes orders! We don’t want to introduce any issues with taking orders!). Although we cannot easily change the underlying monolith database, if there’s hope, you may be able to carefully make changes to the monolith application to call our new orders service. I highly recommend <a href="https://www.amazon.com/Working-Effectively-Legacy-Michael-Feathers/dp/0131177052">Michael Feather’s “Working Effectively with Legacy Code”</a> if you’re unsure of how best to do this. There are patterns like the Sprout Method/Class and/or Wrap Method/Class that could help here.</p>
+
+<p>When we make a change to our monolith/backend, we don’t want to replace the old code path. We want to put in just enough code to allow <strong>BOTH</strong> the old or the new code path to run, potentially even in parallel, as deemed fit. Ideally the new version of the monolith with this change will allow us to, at run time, control whether we’re sending to the new Orders service, the old monolith code path, or both. In any combination of call paths, we want to instrument heavily to understand any potential deviations between the old and new execution path.</p>
+
+<p>Another thing to note. If we enable the monolith to send the execution to both the old code path as well as calling our new service, we need a way to flag this transaction/call to the new service as a “synthetic” call. If your new service is less critical than in this example, an order service, and you can deal with duplicates, then maybe this synthetic-request identification is less important. If your new service tends to serve more read-only traffic, again you may not worry as much about identifying synthetic transactions. In the case of a synthentic transaction, however, you want to be able to run the entire service end-to-end including storing into the database. You may take options here to either store the data with a “synthetic” flag, or just rollback the transaction if your data store supports that.</p>
+
+<p>The last thing to note here is when we make our change to the monolith/backend, we want to again use a <a href="http://blog.christianposta.com/deploy/blue-green-deployments-a-b-testing-and-canary-releases/">dark launch/canary/rolling release</a> approach. We will need our infrastructure to support this. We will look closer at this in the second part.</p>
+
+<p>At this point we’re forcing the traffic back through the monolith. We’re trying not to perturb the main call flow as much as possible so we can quickly roll back in the event a <a href="http://blog.christianposta.com/deploy/blue-green-deployments-a-b-testing-and-canary-releases/">canary</a> doesn’t go well. On the other hand, it may be useful to deploy a gateway/control component that can more fine-grain control the call to the new service instead of forcing to the monolith. In this case, the gateway would have the control logic whether to send the transaction to the monolith, to the new service, or both.</p>
+
+<p><img src="/images/decomp/decomp06.png" alt="" /></p>
+
+<h4 id="considerations-4">Considerations</h4>
+
+<ul>
+  <li>Introducing the new Orders service into the code path introduces risk</li>
+  <li>We need to send traffic to the new service in a controlled manner</li>
+  <li>We want to be able to direct traffic to the new service as well as the old code path</li>
+  <li>We need to instrument and monitor the impact of the new service</li>
+  <li>We need ways to flag transactions as “synthetic” so we don’t end up in nasty business-consistency problems</li>
+  <li>We wish to deploy this new functionality to certain cohorts/groups/users</li>
+</ul>
+
+<h3 id="canaryrolling-release-to-new-service">Canary/Rolling Release to new service</h3>
+
+<p><img src="/images/decomp/decomp07.png" alt="" /></p>
+
+<p>If we find that the previous step does not introduces negative impacts to our transaction path and we have high confidence through our testing and initial experimentation in production with shadowing the traffic, we can now configure the monolith to NOT shadow and actually send traffic over to the new service. In this case, we need to be able to specify certain cohorts/groups/users to always go to the new service. In this case, we’re slowly draining the real production traffic that goes through the old code path. We can increase the rolling release of our <code class="highlighter-rouge">Backend</code> service until all of our users are on the new Orders microservice.</p>
+
+<p>One point of risk we need to make concrete: Once we start rolling live traffic (non-shadow/synthetic traffic) over to the new service, we’re expecting users that match the cohort group to always be going to this new service. We’re not able to switch back and forth between old and new code paths. In this case, if we do need to rollback, this will involve more coordination to move any new transactions from the new service back to a state that the old monolith could use. Hopefully this doesn’t happen, but is something to note and plan for (and test!).</p>
+
+<h4 id="considerations-5">Considerations</h4>
+
+<ul>
+  <li>We can identify cohort groups and send live transaction traffic to our new microservice</li>
+  <li>We still need the direct database connection to the monolith because there will be a period of time where transactions will still be going to both code paths</li>
+  <li>Once we’ve moved all traffic over to our microservice, we should be in position to retire the old functionality</li>
+  <li>Note that once we’re sending live traffic over to the new service, we have to consider the fact a rollback to the old code path will involve some difficulty and coordination</li>
+</ul>
+
+<h3 id="offline-data-etlmigration">Offline data ETL/migration</h3>
+
+<p><img src="/images/decomp/decomp08.png" alt="" /></p>
+
+<p>At this point we should have our <code class="highlighter-rouge">Orders</code> microservice taking live production traffic. The <code class="highlighter-rouge">Monolith</code> or <code class="highlighter-rouge">Backend</code> is still around handling other concerns, but we have successfully migrated service functionality out of the monolith. Our immediate pressing concern now is to pay off the technical debt we’ve borrowed when we created a direct database connection between our new microservice and the <code class="highlighter-rouge">Backend</code> service. Most likely this would involve some kind of one-time ETL from the monolith database to the new service. The monolith may be required to still keep that data around in a read-only mode (think: regulatory compliance, etc). If this is shared reference data (ie, read only) this should be okay. We must make sure that the data in the monolith and the data in the new microservice is not some shared mutable data. If the data is shared/mutable then we can end up in divergent data/data ownership problems.</p>
+
+<h4 id="considerations-6">Considerations</h4>
+
+<ul>
+  <li>Our new <code class="highlighter-rouge">Orders</code> microservice is now in the last throws of becoming fully autonomous</li>
+  <li>We need to pay down the technical debt we borrwed when we connected the <code class="highlighter-rouge">Orders</code> service database to the <code class="highlighter-rouge">Backend</code> database</li>
+  <li>We will have a one-time ETL for the data that should reside in the <code class="highlighter-rouge">Orders</code> service</li>
+  <li>We need to be mindful of divergent data problems</li>
+</ul>
+
+<h3 id="disconnectdecouple-the-datastores">Disconnect/decouple the datastores</h3>
+
+<p><img src="/images/decomp/decomp09.png" alt="" /></p>
+
+<p>Once we’ve completed the previous step, we should have our new <code class="highlighter-rouge">Orders</code> microservice independent and ready to participate in a services architecture. The steps presented here all have their own considerations, pros, and cons. We should aim to satisfy all of the steps and not leave technical debt to accrue interest. Of course, there will be variations on this pattern, but the approach is sound.</p>
+
+<p>In the next blog post, I’ll show how to do these steps with the example service I’ve referred to previously and dig deeper into some of the tools, frameworks, and infrastructure that helps assist. We’ll look at things like <a href="http://ziobrando.blogspot.com/2013/11/introducing-event-storming.html">Kubernetes</a>, <a href="https://istio.io">Istio</a>, feature-flag frameworks, data-view tools, and test frameworks. <a href="http://www.twitter.com/christianposta">Stay tuned!</a></p>
+
+
+      <hr />
+      <footer role="contentinfo">
+        <div class="social-share">
+  <h4>Share on</h4>
+  <ul>
+    <li>
+      <a href="https://twitter.com/intent/tweet?text=http://blog.christianposta.com/microservices/low-risk-monolith-to-microservice-evolution/" class="twitter" title="Share on Twitter"><i class="fa fa-twitter"></i><span> Twitter</span></a>
+    </li>
+    <li>
+      <a href="https://www.facebook.com/sharer/sharer.php?u=http://blog.christianposta.com/microservices/low-risk-monolith-to-microservice-evolution/" class="facebook" title="Share on Facebook"><i class="fa fa-facebook"></i><span> Facebook</span></a>
+    </li>
+    <li>
+      <a href="https://plus.google.com/share?url=http://blog.christianposta.com/microservices/low-risk-monolith-to-microservice-evolution/" class="google-plus" title="Share on Google Plus"><i class="fa fa-google-plus"></i><span> Google+</span></a>
+    </li>
+  </ul>
+</div><!-- /.social-share -->
+        <p class="byline"><strong>Low-risk Monolith to Microservice Evolution Part I</strong> was published on <time datetime="2017-09-19T17:09:46+00:00">September 19, 2017</time>.</p>
+      </footer>
+    </div><!-- /.article-wrap -->
+  
+    <section id="disqus_thread"></section><!-- /#disqus_thread -->
+  
+  </article>
+</div><!-- /#main -->
+
+<div class="footer-wrap">
+  <div class="related-articles">
+  <h4>You might also enjoy <small class="pull-right">(<a href="http://blog.christianposta.com/posts/">View all posts</a>)</small></h4>
+    <ul>
+    
+    </ul>
+    <hr />
+  </div><!-- /.related-articles -->
+  <footer>
+    
+
+<span>&copy; 2018 Christian Posta. Powered by <a href="http://jekyllrb.com" rel="nofollow">Jekyll</a> using the <a href="http://mademistakes.com/minimal-mistakes/" rel="nofollow">Minimal Mistakes</a> theme.</span>
+
+  </footer>
+</div><!-- /.footer-wrap -->
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="http://blog.christianposta.com/assets/js/vendor/jquery-1.9.1.min.js"><\/script>')</script>
+<script src="http://blog.christianposta.com/assets/js/scripts.min.js"></script>
+
+<!-- Asynchronous Google Analytics snippet -->
+<script>
+  var _gaq = _gaq || [];
+  var pluginUrl = 
+ '//www.google-analytics.com/plugins/ga/inpage_linkid.js';
+  _gaq.push(['_require', 'inpage_linkid', pluginUrl]);
+  _gaq.push(['_setAccount', 'UA-60152356-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+  
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+    var disqus_shortname = 'ceposta-blog'; // required: replace example with your forum shortname
+
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+	        
+
+</body>
+</html>
